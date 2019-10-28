@@ -30,6 +30,9 @@
 ;;; Code:
 (require 'ob)
 
+;; optionally define a file extension for this language
+(add-to-list 'org-babel-tangle-lang-exts '("yml"))
+
 (defconst org-babel-header-args:ansible
   '((inventory . :any)
     (hosts . :any)
@@ -37,7 +40,8 @@
     (user . :any)
     (become . :any)
     (oneline . :any)
-    (become-user . :any))
+    (become-user . :any)
+    (verbose . :any))
   "ansible header arguments")
 
 (defun org-babel-execute:ansible (body params)
@@ -47,14 +51,16 @@
          (module (or (cdr (assoc :module params)) "shell"))
          (hosts (or (cdr (assoc :hosts params)) "all"))
          (forks (cdr (assoc :forks params)))
-         (user (or (cdr (assoc :user params)) "root"))
+         (user (or (cdr (assoc :user params))))
          (oneline (assoc :oneline params))
          (become (assoc :become params))
          (become-user (cdr (assoc :become-user params)))
+         (verbose (assoc :verbose params))
          (playbook (assoc :playbook params))
          (args (concat " -i " inventory-file
                      (when user (format " -u %s" user))
                      (when become " --become")
+                     (when verbose " -v")
                      (when become-user (format " --become-user %s" become-user))
                      (when forks (format " -f %s" forks)))))
     (with-temp-file inventory-file (insert inventory))
@@ -63,7 +69,7 @@
             (if playbook
                 (let ((playbook-file (org-babel-temp-file "ob-ansible-playbook")))
                   (with-temp-file playbook-file (insert body))
-                  (concat "ansible-playbook" args " " playbook-file))
+                  (concat "ANSIBLE_NOCOLOR=True ansible-playbook" args " " playbook-file))
               (concat "ansible"
                       (format " \"%s\"" hosts)
                       args
@@ -76,7 +82,7 @@
          (insert (concat cmd "\n")))
        (shell-command-to-string cmd)))))
 
-(defun org-babel-ansible--preprocess-inline-src (body)
+(defun org-babel-ansible--preprocess-inline-src (body params)
   (if (string-match "\\(src[ \t]*[:=][ \t]*\\)\\([^ \t]+\\)" body)
       (let ((begin (match-beginning 0))
             (end (match-end 0))
